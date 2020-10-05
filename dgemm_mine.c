@@ -27,7 +27,7 @@ void basic_dgemm(const int lda, const int M, const int N, const int K,
 }
 
 void basic_dgemm_square(const int lda,
-                 const double *A, const double *B, double *C)
+                 const double * restrict A, const double * restrict B, double * restrict C)
 {
     const int M = BLOCK_SIZE;
     int i, j, k;
@@ -43,7 +43,7 @@ void basic_dgemm_square(const int lda,
 }
 
 void do_block_square(const int lda,
-              const double *A, const double *B, double *C,
+              const double * restrict A, const double * restrict B, double * restrict C,
               const int i, const int j, const int k)
 {
 
