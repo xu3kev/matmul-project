@@ -1,7 +1,7 @@
 const char* dgemm_desc = "Simple blocked dgemm.";
 
 #ifndef BLOCK_SIZE
-#define BLOCK_SIZE ((int) 64)
+#define BLOCK_SIZE ((int) 256)
 #endif
 
 /*
@@ -11,39 +11,71 @@ const char* dgemm_desc = "Simple blocked dgemm.";
 
   lda is the leading dimension of the matrix (the M of square_dgemm).
 */
+//void basic_dgemm(const int lda, const int M, const int N, const int K,
+//                 const double *A, const double *B, double *C)
+//{
+//    int i, j, k;
+//    for (i = 0; i < M; ++i) {
+//        for (j = 0; j < N; ++j) {
+//            double cij = C[j*lda+i];
+//            for (k = 0; k < K; ++k) {
+//                cij += A[k*lda+i] * B[j*lda+k];
+//            }
+//            C[j*lda+i] = cij;
+//        }
+//    }
+//}
 void basic_dgemm(const int lda, const int M, const int N, const int K,
-                 const double *A, const double *B, double *C)
+                 const double * __restrict__ A, const double * __restrict__ B, double * __restrict__ C)
 {
     int i, j, k;
-    for (i = 0; i < M; ++i) {
-        for (j = 0; j < N; ++j) {
-            double cij = C[j*lda+i];
-            for (k = 0; k < K; ++k) {
-                cij += A[k*lda+i] * B[j*lda+k];
+    for (j = 0; j < N; ++j) {
+        for (k = 0; k < K; ++k) {
+            double s = B[j*lda+k];
+            for (i = 0; i < M; ++i) {
+                double cij = C[j*lda+i];
+                cij += A[k*lda+i] * s;
+                C[j*lda+i] = cij;
             }
-            C[j*lda+i] = cij;
         }
     }
 }
 
+//void basic_dgemm_square(const int lda,
+//                 const double * restrict A, const double * restrict B, double * restrict C)
+//{
+//    const int M = BLOCK_SIZE;
+//    int i, j, k;
+//    for (i = 0; i < M; ++i) {
+//        for (j = 0; j < M; ++j) {
+//            double cij = C[j*lda+i];
+//            for (k = 0; k < M; ++k) {
+//                cij += A[k*lda+i] * B[j*lda+k];
+//            }
+//            C[j*lda+i] = cij;
+//        }
+//    }
+//}
+
 void basic_dgemm_square(const int lda,
-                 const double * restrict A, const double * restrict B, double * restrict C)
+                 const double * __restrict__ A, const double * __restrict__ B, double * __restrict__ C)
 {
     const int M = BLOCK_SIZE;
     int i, j, k;
-    for (i = 0; i < M; ++i) {
-        for (j = 0; j < M; ++j) {
-            double cij = C[j*lda+i];
-            for (k = 0; k < M; ++k) {
-                cij += A[k*lda+i] * B[j*lda+k];
+    for (j = 0; j < M*lda; j+=lda) {
+        for (k = 0; k < M; ++k) {
+            double s = B[j+k];
+            for (i = 0; i < M; ++i) {
+                double cij = C[j+i];
+                cij += A[k*lda+i] * s;
+                C[j+i] = cij;
             }
-            C[j*lda+i] = cij;
         }
     }
 }
 
 void do_block_square(const int lda,
-              const double * restrict A, const double * restrict B, double * restrict C,
+              const double * __restrict__ A, const double * __restrict__ B, double * __restrict__ C,
               const int i, const int j, const int k)
 {
 
