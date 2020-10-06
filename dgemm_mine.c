@@ -1,7 +1,7 @@
 const char* dgemm_desc = "Simple blocked dgemm.";
 
 #ifndef BLOCK_SIZE
-#define BLOCK_SIZE ((int) 64)
+#define BLOCK_SIZE ((int) 16)
 #endif
 
 /*
@@ -19,39 +19,73 @@ void basic_dgemm(const int lda, const int M, const int N, const int K,
         for (j = 0; j < N; ++j) {
             double cij = C[j*lda+i];
             for (k = 0; k < K; ++k) {
+                //printf("A??, %f\n", A[0]);
+                //printf("B??, %f\n", B[0]);
                 cij += A[k*lda+i] * B[j*lda+k];
             }
             C[j*lda+i] = cij;
+            //printf("C??, %f\n", cij);
         }
     }
 }
 
-void basic_dgemm_square(const int lda,
-                 const double * restrict A, const double * restrict B, double * restrict C)
+void basic_dgemm_square(const double * __restrict__ A, const double * __restrict__ B, double * __restrict__ C)
 {
     const int M = BLOCK_SIZE;
     int i, j, k;
     for (i = 0; i < M; ++i) {
         for (j = 0; j < M; ++j) {
-            double cij = C[j*lda+i];
+            double cij = C[j*M+i];
             for (k = 0; k < M; ++k) {
-                cij += A[k*lda+i] * B[j*lda+k];
+                cij += A[k*M+i] * B[j*M+k];
             }
-            C[j*lda+i] = cij;
+            C[j*M+i] = cij;
+        }
+    }
+}
+
+void do_copy_square_in(const int lda, const double * restrict A,  double * restrict AA){
+    int i, j, k;
+    const int M = BLOCK_SIZE;
+    for(i = 0; i < M; ++i){
+        for(j = 0; j < M; ++j){
+            AA[i*M+j] = A[i*lda+j];
+        }
+    }
+}
+
+void do_copy_square_out(const int lda, double * restrict A, const double *restrict  AA){
+    int i, j, k;
+    const int M = BLOCK_SIZE;
+    for(i = 0; i < M; ++i){
+        for(j = 0; j < M; ++j){
+             A[i*lda+j] = AA[i*M+j] ;
         }
     }
 }
 
 void do_block_square(const int lda,
               const double * restrict A, const double * restrict B, double * restrict C,
+              const double * restrict AA, const double * restrict BB, double * restrict CC,
               const int i, const int j, const int k)
 {
 
     const int M = BLOCK_SIZE;
-    const double *a = A + i + k*lda;
-    const double *b = B + k + j*lda;
-    const double *c = C + i + j*lda;
-    basic_dgemm_square(lda, A + i + k*lda, B + k + j*lda, C + i + j*lda);
+    do_copy_square_in(lda, A+i+k*lda, AA);
+    do_copy_square_in(lda, B+k+j*lda, BB);
+    do_copy_square_in(lda, C+i+j*lda, CC);
+    //memset(CC, 0, sizeof(double)*M*M);
+
+    //printf("Aij, %f\n", A[i+k*lda]);
+    //printf("AA , %f\n", AA[0]);
+    //printf("Bij, %f\n", B[k+j*lda]);
+    //printf("BB , %f\n", BB[0]);
+
+    basic_dgemm_square(AA, BB, CC);
+
+    do_copy_square_out(lda, C+i+j*lda, CC);
+    //printf("Cij, %f\n", C[i+j*lda]);
+    //printf("CC , %f\n", CC[0]);
 }
 
 void do_block(const int lda,
@@ -61,8 +95,12 @@ void do_block(const int lda,
     const int M = (i+BLOCK_SIZE > lda? lda-i : BLOCK_SIZE);
     const int N = (j+BLOCK_SIZE > lda? lda-j : BLOCK_SIZE);
     const int K = (k+BLOCK_SIZE > lda? lda-k : BLOCK_SIZE);
+    //printf("A C, %f\n", A[i+k*lda]);
+    //printf("B C, %f\n", B[k+j*lda]);
+
     basic_dgemm(lda, M, N, K,
                 A + i + k*lda, B + k + j*lda, C + i + j*lda);
+    //printf("C C, %f\n", C[i+j*lda]);
 }
 
 void square_dgemm(const int M, const double *A, const double *B, double *C)
@@ -71,6 +109,9 @@ void square_dgemm(const int M, const double *A, const double *B, double *C)
     int bi, bj, bk;
     
     const int leftover = M % BLOCK_SIZE ? 1:0;
+    double  AA[BLOCK_SIZE*BLOCK_SIZE] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
+    double  BB[BLOCK_SIZE*BLOCK_SIZE] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
+    double  CC[BLOCK_SIZE*BLOCK_SIZE] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
 
     for (bi = 0; bi < n_blocks; ++bi) {
         const int i = bi * BLOCK_SIZE;
@@ -78,7 +119,8 @@ void square_dgemm(const int M, const double *A, const double *B, double *C)
             const int j = bj * BLOCK_SIZE;
             for (bk = 0; bk < n_blocks; ++bk) {
                 const int k = bk * BLOCK_SIZE;
-                do_block_square(M, A, B, C, i, j, k);
+                do_block_square(M, A, B, C, AA, BB, CC, i, j, k);
+                //do_block(M, A, B, C, i, j, k);
             }
             if (leftover){
                 const int k = n_blocks * BLOCK_SIZE;

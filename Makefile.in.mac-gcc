@@ -10,7 +10,7 @@ LD=$(FC)
 PYTHON=python
 
 # Compiler optimization flags.  You will definitely want to play with these!
-OPTFLAGS = -O3 
+OPTFLAGS = -O3  -ftree-vectorize -fopt-info-vec-missed 
 CFLAGS = -std=gnu99 
 FFLAGS =
 LDFLAGS = -fopenmp
