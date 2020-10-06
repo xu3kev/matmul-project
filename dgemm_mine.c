@@ -2,7 +2,7 @@ const char* dgemm_desc = "Simple blocked dgemm.";
 
 //BLOCK_SIZE need to have factor 8 !!!!
 #ifndef SMALL_BLOCK_SIZE
-#define SMALL_BLOCK_SIZE ((int) 4)
+#define SMALL_BLOCK_SIZE ((int) 8)
 #endif
 
 #ifndef BLOCK_SIZE
@@ -50,14 +50,15 @@ void basic_dgemm(const int lda, const int M, const int N, const int K,
 
 void dgemm_small(const double * restrict A, const double * restrict B, double * restrict C){
     const int M = SMALL_BLOCK_SIZE;
+    const int lda = BLOCK_SIZE;
     int i,j,k;
-    for (j = 0; j < M*M; j+=M) {
+    for (j = 0; j < M; ++j) {
         for (k = 0; k < M; ++k) {
-            double s = B[j+k];
+            double s = B[j*lda+k];
             for (i = 0; i < M; ++i) {
-                double cij = C[j+i];
-                cij += A[k*M+i] * s;
-                C[j+i] = cij;
+                double cij = C[j*lda+i];
+                cij += A[k*lda+i] * s;
+                C[j*lda+i] = cij;
             }
         }
     }
@@ -66,27 +67,17 @@ void dgemm_small(const double * restrict A, const double * restrict B, double * 
 
 void basic_dgemm_square(const double * restrict A, const double * restrict B, double * restrict C)
 {
-    //int i, j, k;
-    //for (j = 0; j < M; ++j) {
-    //    for (k = 0; k < M; ++k) {
-    //        double s = B[j*M+k];
-    //        for (i = 0; i < M; ++i) {
-    //            double cij = C[j*M+i];
-    //            cij += A[k*M+i] * s;
-    //            C[j+i] = cij;
-    //        }
-    //    }
-    //}
     const int M = BLOCK_SIZE;
     const int n_blocks = BLOCK_SIZE/SMALL_BLOCK_SIZE;
     int bi, bj, bk;
-    for (bi = 0; bi < n_blocks; ++bi) {
-        const int i = bi * SMALL_BLOCK_SIZE;
-        for (bj = 0; bj < n_blocks; ++bj) {
-            const int j = bj * SMALL_BLOCK_SIZE;
-            for (bk = 0; bk < n_blocks; ++bk) {
-                const int k = bk * SMALL_BLOCK_SIZE;
-                basic_dgemm(M, SMALL_BLOCK_SIZE, SMALL_BLOCK_SIZE, SMALL_BLOCK_SIZE, A + i + k*M, B + k + j*M, C + i + j*M);
+    for (bj = 0; bj < n_blocks; ++bj) {
+        const int j = bj * SMALL_BLOCK_SIZE;
+        for (bk = 0; bk < n_blocks; ++bk) {
+            const int k = bk * SMALL_BLOCK_SIZE;
+            for (bi = 0; bi < n_blocks; ++bi) {
+                const int i = bi * SMALL_BLOCK_SIZE;
+                //basic_dgemm(M, SMALL_BLOCK_SIZE, SMALL_BLOCK_SIZE, SMALL_BLOCK_SIZE, A + i + k*M, B + k + j*M, C + i + j*M);
+                dgemm_small(A+i+k*M, B+k+j*M, C+i+j*M);
             }
         }
     }
