@@ -66,7 +66,7 @@ void do_copy_square_out(const int lda, double * restrict A, const double *restri
 
 void do_block_square(const int lda,
               const double * restrict A, const double * restrict B, double * restrict C,
-              const double * restrict AA, const double * restrict BB, double * restrict CC,
+              double * restrict AA, double * restrict BB, double * restrict CC,
               const int i, const int j, const int k)
 {
 
