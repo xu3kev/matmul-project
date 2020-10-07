@@ -61,6 +61,8 @@ void depad(const double * restrict s, double * restrict d, const int M, const in
     }
 }
 
+
+
 //register blocking
 void __attribute__ ((noinline)) dgemm_smaller(const double * restrict A, const double * restrict B, double * restrict C){
     const int M = 8;
@@ -80,35 +82,65 @@ void __attribute__ ((noinline)) dgemm_smaller(const double * restrict A, const d
 
     __m256d cc1,cc2;
     __m256d s;
+    __m256d s_per;
     __m256d ss;
     __m256d aa1;
     __m256d aa2;
     for (j = 0; j < 8; ++j) {
         //for(i = 0;i < 8; ++i)
         //    cc[i] = C[j*lda+i];
-        cc1 = _mm256_load_pd(C+j*lda+i);
-        cc2 = _mm256_load_pd(C+j*lda+i+4);
+        cc1 = _mm256_load_pd(C+j*lda);
+        cc2 = _mm256_load_pd(C+j*lda+4);
 
         //double s = B[j*lda+k];
-        s = _mm256_broadcast_sd(B+j*lda);
         
         //s = _mm256_castsi256_pd(_mm256_permute2x128_si256(_mm256_castpd_si256(s),_mm256_castpd_si256(s),0));
-        for (k = 0; k < 8; ++k) {
-            ss = _mm256_broadcast_sd(B+j*lda+k);
-            aa1 = _mm256_load_pd(A+k*lda+i);
-            aa2 = _mm256_load_pd(A+k*lda+i+4);
-            //for (i = 0; i < 8; ++i) {
-            //    cc[i] += A[k*lda+i] * s;
-            //}
-            //cc1 = _mm256_add_pd(cc1, _mm256_mul_pd(aa1,ss));
-            //cc2 = _mm256_add_pd(cc2, _mm256_mul_pd(aa2,ss));
-            cc1 = _mm256_fmadd_pd(aa1,ss,cc1);
+        //for (k = 0; k < 8; ++k) {
+
+
+#define MUL(kk,SHUF) ss = _mm256_shuffle_pd(s_per,s_per,SHUF);\
+        aa1 = _mm256_load_pd(A+kk*lda+i);\
+        aa2 = _mm256_load_pd(A+kk*lda+i+4);\
+        cc1 = _mm256_fmadd_pd(aa1,ss,cc1);\
+        cc2 = _mm256_fmadd_pd(aa2,ss,cc2);
+
+        //s = _mm256_load_pd(B+j*lda);
+        //s_per = _mm256_castsi256_pd(_mm256_permute2x128_si256(_mm256_castpd_si256(s),_mm256_castpd_si256(s),0));
+        //MUL(0,0);
+        //MUL(1,15);
+
+        //s_per = _mm256_castsi256_pd(_mm256_permute2x128_si256(_mm256_castpd_si256(s),_mm256_castpd_si256(s),17));
+        //MUL(2,0);
+        //MUL(3,15);
+
+        //s = _mm256_load_pd(B+j*lda+4);
+        //s_per = _mm256_castsi256_pd(_mm256_permute2x128_si256(_mm256_castpd_si256(s),_mm256_castpd_si256(s),0));
+        //MUL(4,0);
+        //MUL(5,15);
+
+        //s_per = _mm256_castsi256_pd(_mm256_permute2x128_si256(_mm256_castpd_si256(s),_mm256_castpd_si256(s),17));
+        //MUL(6,0);
+        //MUL(7,15);
+
+#define MUL0(kk) ss = _mm256_broadcast_sd(B+j*lda+kk);\
+            aa1 = _mm256_load_pd(A+kk*lda+i);\
+            aa2 = _mm256_load_pd(A+kk*lda+i+4);\
+            cc1 = _mm256_fmadd_pd(aa1,ss,cc1);\
             cc2 = _mm256_fmadd_pd(aa2,ss,cc2);
-        }
+        MUL0(0);
+        MUL0(1);
+        MUL0(2);
+        MUL0(3);
+        MUL0(4);
+        MUL0(5);
+        MUL0(6);
+        MUL0(7);
+
+        //}
         //for(i=0;i<8;++i)
         //    C[j*lda+i]=cc[i];
-        _mm256_store_pd(C+j*lda+i, cc1);
-        _mm256_store_pd(C+j*lda+i+4, cc2);
+        _mm256_store_pd(C+j*lda, cc1);
+        _mm256_store_pd(C+j*lda+4, cc2);
     }
 
     //for (j = 0; j < 8; ++j) {
