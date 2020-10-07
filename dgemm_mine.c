@@ -6,6 +6,10 @@ const char* dgemm_desc = "My awesome dgemm two-blocking with zero-padding.";
 #define SMALL_BLOCK_SIZE ((int) 8)
 #endif
 
+#ifndef SMALL_BLOCK_SIZE_X
+#define SMALL_BLOCK_SIZE_X ((int) 8)
+#endif
+
 #ifndef BLOCK_SIZE
 #define BLOCK_SIZE ((int) 128)
 #endif
@@ -58,44 +62,108 @@ void depad(const double * restrict s, double * restrict d, const int M, const in
 }
 
 //register blocking
-inline void dgemm_smaller(const double * restrict A, const double * restrict B, double * restrict C){
-    const int M = 4;
+void __attribute__ ((noinline)) dgemm_smaller(const double * restrict A, const double * restrict B, double * restrict C){
+    const int M = 8;
     const int lda = BLOCK_SIZE;
     int i,j,k;
-    double cc[4] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
-    for (j = 0; j < 4; ++j) {
-        for(i = 0;i < 4; ++i)
+    double cc[8] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
+    //for(j=0;j<8;++j){
+    //    for( i = 0;i<8;++i){
+    //        C[j*lda+i] = B[j*lda+i]+A[j*lda+i];
+    //    }
+    //}
+    //for(j=0;j<8;++j){
+    //    for( i = 0;i<8;++i){
+    //        C[j*lda+i] = B[j*lda+i]+A[j*lda+i];
+    //    }
+    //}
+
+    __m256d cc1,cc2;
+    __m256d s;
+    __m256d ss;
+    __m256d aa1;
+    __m256d aa2;
+    for (j = 0; j < 8; ++j) {
+        //for(i = 0;i < 8; ++i)
+        //    cc[i] = C[j*lda+i];
+        cc1 = _mm256_load_pd(C+j*lda+i);
+        cc2 = _mm256_load_pd(C+j*lda+i+4);
+
+        //double s = B[j*lda+k];
+        s = _mm256_broadcast_sd(B+j*lda);
+        
+        //s = _mm256_castsi256_pd(_mm256_permute2x128_si256(_mm256_castpd_si256(s),_mm256_castpd_si256(s),0));
+        for (k = 0; k < 8; ++k) {
+            ss = _mm256_broadcast_sd(B+j*lda+k);
+            aa1 = _mm256_load_pd(A+k*lda+i);
+            aa2 = _mm256_load_pd(A+k*lda+i+4);
+            //for (i = 0; i < 8; ++i) {
+            //    cc[i] += A[k*lda+i] * s;
+            //}
+            //cc1 = _mm256_add_pd(cc1, _mm256_mul_pd(aa1,ss));
+            //cc2 = _mm256_add_pd(cc2, _mm256_mul_pd(aa2,ss));
+            cc1 = _mm256_fmadd_pd(aa1,ss,cc1);
+            cc2 = _mm256_fmadd_pd(aa2,ss,cc2);
+        }
+        //for(i=0;i<8;++i)
+        //    C[j*lda+i]=cc[i];
+        _mm256_store_pd(C+j*lda+i, cc1);
+        _mm256_store_pd(C+j*lda+i+4, cc2);
+    }
+
+    //for (j = 0; j < 8; ++j) {
+    //    for(i = 0;i < 8; ++i)
+    //        cc[i] = C[j*lda+i];
+    //    for (k = 0; k < 8; ++k) {
+    //        double s = B[j*lda+k];
+    //        for (i = 0; i < 8; ++i) {
+    //            cc[i] += A[k*lda+i] * s;
+    //        }
+    //    }
+    //    for(i=0;i<8;++i)
+    //        C[j*lda+i]=cc[i];
+    //}
+}
+void dgemm_small(const double * restrict A, const double * restrict B, double * restrict C){
+
+
+    const int M = 8;
+    const int lda = BLOCK_SIZE;
+    int i,j,k;
+    double cc[8] __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)));
+    for (j = 0; j < 8; ++j) {
+        for(i = 0;i < 8; ++i)
             cc[i] = C[j*lda+i];
-        for (k = 0; k < 4; ++k) {
+        for (k = 0; k < 8; ++k) {
             double s = B[j*lda+k];
-            for (i = 0; i < 4; ++i) {
+            for (i = 0; i < 8; ++i) {
                 cc[i] += A[k*lda+i] * s;
             }
         }
-        for(i=0;i<4;++i)
+        for(i=0;i<8;++i)
             C[j*lda+i]=cc[i];
     }  
-}
-void dgemm_small(const double * restrict A, const double * restrict B, double * restrict C){
-    const int M = SMALL_BLOCK_SIZE;
-    const int lda = BLOCK_SIZE;
-    int i,j,k;
-    i=0;k=0;j=0;
-    dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
-    i=0;k=4;j=0;
-    dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
-    i=0;k=0;j=4;
-    dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
-    i=0;k=4;j=4;
-    dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
-    i=4;k=0;j=0;
-    dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
-    i=4;k=4;j=0;
-    dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
-    i=4;k=0;j=4;
-    dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
-    i=4;k=4;j=4;
-    dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
+
+
+    //const int M = SMALL_BLOCK_SIZE;
+    //const int lda = BLOCK_SIZE;
+    //int i,j,k;
+    //i=0;k=8;j=0;
+    //dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
+    //i=0;k=8;j=8;
+    //dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
+    //i=0;k=0;j=8;
+    //dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
+    //i=0;k=0;j=0;
+    //dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
+    //i=8;k=0;j=0;
+    //dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
+    //i=8;k=0;j=8;
+    //dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
+    //i=8;k=8;j=8;
+    //dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
+    //i=8;k=8;j=0;
+    //dgemm_smaller(A+i+lda*k,B+k+lda*j,C+i+lda*j);
 }
 
 void basic_dgemm_square(const double * restrict A, const double * restrict B, double * restrict C)
@@ -111,7 +179,8 @@ void basic_dgemm_square(const double * restrict A, const double * restrict B, do
             for (bi = 0; bi < n_blocks; ++bi) {
                 const int i = bi * SMALL_BLOCK_SIZE;
                 //basic_dgemm(M, SMALL_BLOCK_SIZE, SMALL_BLOCK_SIZE, SMALL_BLOCK_SIZE, A + i + k*M, B + k + j*M, C + i + j*M);
-                dgemm_small(A+i+k*M, B+k+j*M, C+i+j*M);
+                //dgemm_small(A+i+k*M, B+k+j*M, C+i+j*M);
+                dgemm_smaller(A+i+k*M, B+k+j*M, C+i+j*M);
                 //kdgemm(A+i+k*M, B+k+j*M, C+i+j*M);
             }
         }
@@ -123,6 +192,14 @@ void do_copy_square_in(const int M, const int lda, const double * restrict A,  d
     for(j = 0; j < M; ++j){
         for(i = 0; i < M; ++i){
             AA[j*M+i] = A[j*lda+i];
+        }
+    }
+}
+void do_copy_square_in_transpose(const int M, const int lda, const double * restrict A,  double * restrict AA){
+    int i, j;
+    for(j = 0; j < M; ++j){
+        for(i = 0; i < M; ++i){
+            AA[j*M+i] = A[i*lda+j];
         }
     }
 }
