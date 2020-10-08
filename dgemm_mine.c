@@ -76,30 +76,34 @@ void dgemm_smaller(const double * restrict A, const double * restrict B, double 
     __m256d aa2;
     #define regA 2
     #define regB 2
-    double c[regA][regB];
+    __m256d c[regA][regB];
     int ci,cj;
-    for(ci=0;ci<8;ci+=regA){
+    for(ci=0;ci<8;ci+=regA*4){
         for(cj=0;cj<8;cj+=regB){
 
             for(j=0;j<regB;++j){
                 for(i=0;i<regA;++i){
-                    c[i][j] = C[(ci+i)+(cj+j)*lda];
+                    c[i][j] = _mm256_load_pd(C+(ci+i*4)+(cj+j)*lda);
                 }
             }
             
             for(k=0;k<8;++k){
                 for(j=0;j<regB;++j){
-                    double bb = B[k+(cj+j)*lda];
+                    //double bb = B[k+(cj+j)*lda];
+                    __m256d bb = _mm256_broadcast_sd(B+k+(cj+j)*lda);
                     for(i=0;i<regA;++i){
-                        double aa = A[(ci+i)+k*lda];
-                        c[i][j]+=aa*bb;
+                        __m256d aa = _mm256_load_pd(A+(ci+i*4)+k*lda);
+                        //c[i][j]+=aa*bb;
+                        c[i][j] = _mm256_fmadd_pd(aa,bb,c[i][j]);
                     }
                 }
             }
 
             for(j=0;j<regB;++j){
                 for(i=0;i<regA;++i){
-                    C[(ci+i)+(cj+j)*lda] = c[i][j];
+                    //C[(ci+i)+(cj+j)*lda] = c[i][j];
+                    _mm256_store_pd(C+(ci+i*4)+(cj+j)*lda, c[i][j]);
+
                 }
             }
              
